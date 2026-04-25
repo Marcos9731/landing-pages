@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>REPORT.AI – Relatório de Campo</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#e8610a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Report.AI">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+
+<!-- SEO -->
+<meta name="description" content="Gerador de relatórios de visita de campo com exportação em PDF. Funciona offline.">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f2f0ed;
+    --surface: #ffffff;
+    --border: #e0ddd8;
+    --border-strong: #c5c2bb;
+    --text: #111111;
+    --text-muted: #5a5855;
+    --text-faint: #959290;
+    --accent: #e8610a;
+    --accent-light: #fff0e6;
+    --accent-mid: #ff7a20;
+    --danger: #c0392b;
+    --danger-light: #fdf0ee;
+    --warning: #c87d00;
+    --warning-light: #fef8ec;
+    --blue: #1a4f8a;
+    --blue-light: #eaf2fb;
+    --radius: 10px;
+    --radius-sm: 6px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.10), 0 1px 2px rgba(0,0,0,0.06);
+    --shadow-md: 0 4px 14px rgba(0,0,0,0.14), 0 2px 4px rgba(0,0,0,0.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f0f0f;
+      --surface: #1a1a1a;
+      --border: #2e2e2e;
+      --border-strong: #444444;
+      --text: #f0ede8;
+      --text-muted: #9e9a96;
+      --text-faint: #6b6865;
+      --accent: #ff7a20;
+      --accent-light: #2e1a08;
+      --accent-mid: #ff9540;
+      --danger: #e05540;
+      --danger-light: #2e1a17;
+      --warning: #d4821a;
+      --warning-light: #2e2010;
+      --blue: #4080c8;
+      --blue-light: #1a2535;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.5; }
+
+  /* Layout */
+  .app-shell { display: flex; flex-direction: column; min-height: 100vh; max-width: 780px; margin: 0 auto; }
+  .top-bar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 20px; position: sticky; top: 0; z-index: 100; }
+  .top-bar-inner { display: flex; align-items: center; gap: 12px; height: 56px; }
+  .app-logo { width: 28px; height: 28px; background: var(--accent); border-radius: 7px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .app-logo svg { width: 16px; height: 16px; fill: white; }
+  .app-title { font-size: 15px; font-weight: 600; color: var(--text); }
+  .app-sub { font-size: 12px; color: var(--text-muted); margin-left: auto; }
+  .main { flex: 1; padding: 20px 16px 40px; }
+
+  /* Progress */
+  .progress-bar { display: flex; gap: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 20px; box-shadow: var(--shadow); }
+  .progress-step { flex: 1; padding: 12px 8px 10px; text-align: center; cursor: pointer; border-right: 1px solid var(--border); transition: background 0.15s; position: relative; }
+  .progress-step:last-child { border-right: none; }
+  .progress-step .ps-num { font-size: 18px; font-weight: 700; line-height: 1; color: var(--text-faint); margin-bottom: 3px; }
+  .progress-step .ps-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-faint); }
+  .progress-step.active { background: var(--accent-light); }
+  .progress-step.active .ps-num { color: var(--accent); }
+  .progress-step.active .ps-label { color: var(--accent); }
+  .progress-step.done .ps-num { color: var(--accent-mid); font-size: 14px; }
+  .progress-step.done .ps-num::before { content: '✓ '; }
+
+  /* Cards */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 14px; box-shadow: var(--shadow); }
+  .card-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 16px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+
+  /* Form */
+  .field { margin-bottom: 14px; }
+  .field:last-child { margin-bottom: 0; }
+  .field label { display: block; font-size: 12px; font-weight: 500; color: var(--text-muted); margin-bottom: 5px; }
+  .field input, .field select, .field textarea {
+    width: 100%; padding: 10px 12px; font-size: 14px; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); background: var(--bg); color: var(--text);
+    font-family: inherit; transition: border-color 0.15s, box-shadow 0.15s; -webkit-appearance: none; appearance: none;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus {
+    outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(29,107,74,0.12);
+  }
+  .field textarea { resize: vertical; min-height: 88px; }
+  .field select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236b6a65'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  @media (max-width: 500px) { .row2, .row3 { grid-template-columns: 1fr; } }
+  .required::after { content: ' *'; color: var(--danger); }
+
+  /* Rating */
+  .rating-row { display: flex; gap: 8px; }
+  .rating-btn { flex: 1; padding: 9px 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text-muted); font-size: 12px; cursor: pointer; text-align: center; transition: all 0.15s; font-family: inherit; }
+  .rating-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .rating-btn.selected { background: var(--accent-light); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .rating-btn.neg.selected { background: var(--danger-light); border-color: var(--danger); color: var(--danger); }
+  .rating-btn.neu.selected { background: var(--warning-light); border-color: var(--warning); color: var(--warning); }
+
+  /* Media upload */
+  .upload-zone {
+    border: 2px dashed var(--border-strong); border-radius: var(--radius); padding: 28px 16px;
+    text-align: center; cursor: pointer; transition: all 0.15s; background: var(--bg);
+  }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: var(--accent-light); }
+  .upload-zone .uz-icon { font-size: 32px; margin-bottom: 8px; }
+  .upload-zone p { font-size: 14px; color: var(--text-muted); margin-bottom: 4px; }
+  .upload-zone small { font-size: 12px; color: var(--text-faint); }
+  .media-grid { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
+  .media-card { display: flex; gap: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px; align-items: flex-start; }
+  .media-preview { position: relative; width: 80px; height: 80px; flex-shrink: 0; border-radius: var(--radius-sm); overflow: hidden; background: var(--border); }
+  .media-preview img, .media-preview video { width: 100%; height: 100%; object-fit: cover; }
+  .media-preview .badge { position: absolute; bottom: 3px; left: 3px; font-size: 8px; font-weight: 700; padding: 2px 5px; background: rgba(0,0,0,0.65); color: white; border-radius: 3px; text-transform: uppercase; }
+  .media-preview .rm { position: absolute; top: 3px; right: 3px; width: 18px; height: 18px; background: rgba(0,0,0,0.65); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 10px; color: white; font-weight: 700; border: none; line-height: 1; }
+  .media-fields { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .media-fields .mf-orig { font-size: 10px; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 2px; }
+  .media-fields input, .media-fields textarea { width: 100%; padding: 7px 10px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-family: inherit; transition: border-color 0.15s; resize: vertical; }
+  .media-fields input:focus, .media-fields textarea:focus { outline: none; border-color: var(--accent); }
+  .media-fields textarea { min-height: 52px; }
+  .media-stat { font-size: 12px; color: var(--text-muted); margin-top: 10px; display: flex; gap: 12px; }
+  .media-stat span { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 3px 8px; }
+
+  .hint { font-size: 11px; color: var(--text-faint); margin-top: 4px; }
+
+  /* Info boxes */
+  .info-box { display: flex; gap: 10px; padding: 12px 14px; border-radius: var(--radius-sm); font-size: 13px; margin-bottom: 14px; }
+  .info-box.blue { background: var(--blue-light); border: 1px solid #b5cde8; color: var(--blue); }
+  .info-box.green { background: var(--accent-light); border: 1px solid #a5d4bb; color: var(--accent); }
+  .info-box.red { background: var(--danger-light); border: 1px solid #e8b5ad; color: var(--danger); }
+  .info-box.yellow { background: var(--warning-light); border: 1px solid #e8d0a5; color: var(--warning); }
+  .info-box .ib-icon { flex-shrink: 0; font-size: 15px; margin-top: 1px; }
+
+  /* Preview */
+  .preview-table { width: 100%; font-size: 13px; border-collapse: collapse; }
+  .preview-table tr { border-bottom: 1px solid var(--border); }
+  .preview-table tr:last-child { border-bottom: none; }
+  .preview-table td { padding: 8px 0; vertical-align: top; }
+  .preview-table td:first-child { color: var(--text-muted); width: 140px; padding-right: 12px; font-size: 12px; }
+  .preview-table td:last-child { color: var(--text); font-weight: 500; }
+  .preview-section { margin-bottom: 16px; }
+  .preview-section h4 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-faint); margin-bottom: 10px; }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 18px; font-size: 14px; font-weight: 500; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; font-family: inherit; transition: all 0.15s; text-decoration: none; white-space: nowrap; }
+  .btn:hover { background: var(--bg); border-color: var(--border-strong); }
+  .btn:active { transform: scale(0.98); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: white; }
+  .btn.primary:hover { background: var(--accent-mid); border-color: var(--accent-mid); }
+  .btn.danger { background: var(--danger); border-color: var(--danger); color: white; }
+  .btn.sm { padding: 7px 12px; font-size: 12px; }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+  .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; flex-wrap: wrap; }
+  .actions .btn-back { margin-right: auto; }
+
+  /* Status */
+  .status { display: none; align-items: center; gap: 10px; padding: 12px 14px; border-radius: var(--radius-sm); font-size: 13px; margin-top: 14px; }
+  .status.show { display: flex; }
+  .status.info { background: var(--blue-light); border: 1px solid #b5cde8; color: var(--blue); }
+  .status.success { background: var(--accent-light); border: 1px solid #a5d4bb; color: var(--accent); }
+  .status.error { background: var(--danger-light); border: 1px solid #e8b5ad; color: var(--danger); }
+  .spinner { width: 15px; height: 15px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+
+
+  /* Responsive */
+  @media (max-width: 600px) {
+    .main { padding: 14px 12px 32px; }
+    .card { padding: 16px; }
+    .top-bar-inner { height: 50px; }
+    .progress-step .ps-label { display: none; }
+    .progress-step { padding: 10px 4px; }
+    .actions { gap: 8px; }
+  }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="top-bar">
+    <div class="top-bar-inner">
+      <div class="app-logo">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/></svg>
+      </div>
+      <span class="app-title">Relatório de Campo</span>
+      <span class="app-sub" id="topStatus">Novo relatório</span>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="progress-bar">
+      <div class="progress-step active" id="tab1" onclick="tryGoStep(1)"><div class="ps-num">1</div><div class="ps-label">Dados</div></div>
+      <div class="progress-step" id="tab2" onclick="tryGoStep(2)"><div class="ps-num">2</div><div class="ps-label">Mídias</div></div>
+      <div class="progress-step" id="tab3" onclick="tryGoStep(3)"><div class="ps-num">3</div><div class="ps-label">Revisar</div></div>
+    </div>
+
+    <!-- STEP 1: DADOS -->
+    <div id="step1">
+      <div class="card">
+        <div class="card-title">Identificação</div>
+        <div class="row2">
+          <div class="field">
+            <label class="required">Nome do cliente</label>
+            <input type="text" id="f_cliente" placeholder="Ex: Empresa ABC Ltda" oninput="updateTopStatus()">
+          </div>
+          <div class="field">
+            <label class="required">Data da visita</label>
+            <input type="date" id="f_data">
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label>Responsável</label>
+            <input type="text" id="f_responsavel" placeholder="Seu nome completo">
+          </div>
+          <div class="field">
+            <label>Contato no cliente</label>
+            <input type="text" id="f_contato" placeholder="Nome do contato">
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label>Cargo do contato</label>
+            <input type="text" id="f_cargo" placeholder="Ex: Gerente de TI">
+          </div>
+          <div class="field">
+            <label>Tipo de visita</label>
+            <select id="f_tipo">
+              <option value="">Selecione...</option>
+              <option>Visita comercial</option>
+              <option>Visita técnica</option>
+              <option>Pós-venda</option>
+              <option>Prospecção</option>
+              <option>Suporte técnico</option>
+              <option>Treinamento</option>
+              <option>Outro</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Local e detalhes</div>
+        <div class="field">
+          <label>Endereço / Local</label>
+          <input type="text" id="f_local" placeholder="Endereço completo ou nome do local">
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label>Hora de chegada</label>
+            <input type="time" id="f_chegada">
+          </div>
+          <div class="field">
+            <label>Hora de saída</label>
+            <input type="time" id="f_saida">
+          </div>
+        </div>
+        <div class="field">
+          <label>Objetivo da visita</label>
+          <input type="text" id="f_objetivo" placeholder="Ex: Apresentação de proposta, instalação de equipamento...">
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Descrição e resultados</div>
+        <div class="field">
+          <label>Descrição detalhada</label>
+          <textarea id="f_descricao" placeholder="Descreva tudo que foi realizado, discutido ou apresentado durante a visita..."></textarea>
+        </div>
+        <div class="field">
+          <label>Resultado da visita</label>
+          <div class="rating-row" id="resultadoRow">
+            <button class="rating-btn neg" onclick="selectResult(this,'Negativo')">✗ Negativo</button>
+            <button class="rating-btn neu" onclick="selectResult(this,'Em andamento')">⟳ Andamento</button>
+            <button class="rating-btn" onclick="selectResult(this,'Proposta enviada')">↑ Proposta</button>
+            <button class="rating-btn" onclick="selectResult(this,'Positivo')">✓ Positivo</button>
+          </div>
+          <input type="hidden" id="f_resultado" value="">
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label>Próxima ação</label>
+            <input type="text" id="f_proxima" placeholder="Ex: Enviar proposta em 3 dias">
+          </div>
+          <div class="field">
+            <label>Data da próxima ação</label>
+            <input type="date" id="f_proxdata">
+          </div>
+        </div>
+        <div class="field">
+          <label>Observações adicionais</label>
+          <textarea id="f_obs" placeholder="Pontos de atenção, dificuldades encontradas, informações extras..." style="min-height:64px"></textarea>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn primary" onclick="goStep(2)">Próximo: Mídias →</button>
+      </div>
+    </div>
+
+    <!-- STEP 2: MÍDIAS -->
+    <div id="step2" style="display:none">
+      <div class="card">
+        <div class="card-title">Fotos e vídeos</div>
+        <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()" ondragover="onDrag(event,true)" ondragleave="onDrag(event,false)" ondrop="onDrop(event)">
+          <div class="uz-icon">📎</div>
+          <p>Toque para adicionar fotos ou vídeos</p>
+          <small>JPG, PNG, GIF, WEBP, MP4, MOV, WEBM — arraste ou selecione múltiplos arquivos</small>
+        </div>
+        <input type="file" id="fileInput" multiple accept="image/*,video/*" style="display:none" onchange="handleFiles(this.files)">
+        <div class="media-grid" id="mediaGrid"></div>
+        <div class="media-stat" id="mediaStat"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Notas gerais sobre as mídias</div>
+        <div class="field">
+          <label>Legenda geral (opcional)</label>
+          <textarea id="f_legenda" placeholder="Observação geral sobre o conjunto de fotos/vídeos..." style="min-height:52px"></textarea>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-back" onclick="goStep(1)">← Voltar</button>
+        <button class="btn primary" onclick="goStep(3)">Próximo: Revisar →</button>
+      </div>
+    </div>
+
+    <!-- STEP 3: REVISAR -->
+    <div id="step3" style="display:none">
+      <div class="card" id="previewCard">
+        <div class="card-title">Resumo do relatório</div>
+        <div id="previewContent"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Gerar relatório</div>
+        <div class="field">
+          <label>Nome do arquivo (sem extensão)</label>
+          <input type="text" id="f_filename" placeholder="relatorio-visita">
+        </div>
+      </div>
+
+      <div class="status" id="mainStatus"></div>
+      <div class="actions">
+        <button class="btn btn-back" onclick="goStep(2)">← Voltar</button>
+        <button class="btn primary" onclick="downloadPDF()">⬇ Baixar PDF</button>
+        <button class="btn" onclick="newReport()">+ Novo relatório</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const { jsPDF } = window.jspdf;
+
+let mediaFiles = []; // each: { file, nome, descricao }
+let currentStep = 1;
+let resultadoSelected = '';
+
+// Init
+document.addEventListener('DOMContentLoaded', () => {
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('f_data').value = today;
+  updateTopStatus();
+  setFilename();
+});
+
+function setFilename() {
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('f_filename').value = 'relatorio-visita-' + today;
+}
+
+function updateTopStatus() {
+  const cliente = document.getElementById('f_cliente').value.trim();
+  document.getElementById('topStatus').textContent = cliente || 'Novo relatório';
+}
+
+function selectResult(btn, val) {
+  document.querySelectorAll('#resultadoRow .rating-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  document.getElementById('f_resultado').value = val;
+  resultadoSelected = val;
+}
+
+function goStep(n) {
+  document.getElementById('step' + currentStep).style.display = 'none';
+  document.getElementById('tab' + currentStep).classList.remove('active');
+  if (currentStep < n) document.getElementById('tab' + currentStep).classList.add('done');
+  currentStep = n;
+  document.getElementById('step' + n).style.display = 'block';
+  document.getElementById('tab' + n).classList.add('active');
+  document.getElementById('tab' + n).classList.remove('done');
+  if (n === 3) buildPreview();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function tryGoStep(n) {
+  if (n <= currentStep || n === currentStep + 1) goStep(n);
+}
+
+// Media
+function handleFiles(files) {
+  Array.from(files).forEach(f => {
+    if (mediaFiles.length >= 30) return;
+    mediaFiles.push({ file: f, nome: '', descricao: '' });
+  });
+  renderMedia();
+}
+
+function onDrag(e, over) {
+  e.preventDefault();
+  document.getElementById('uploadZone').classList.toggle('drag', over);
+}
+
+function onDrop(e) {
+  e.preventDefault();
+  onDrag(e, false);
+  handleFiles(e.dataTransfer.files);
+}
+
+function removeMedia(i) {
+  mediaFiles.splice(i, 1);
+  renderMedia();
+}
+
+function saveMediaField(i, field, value) {
+  mediaFiles[i][field] = value;
+}
+
+function renderMedia() {
+  const grid = document.getElementById('mediaGrid');
+  const stat = document.getElementById('mediaStat');
+  grid.innerHTML = '';
+  mediaFiles.forEach((m, i) => {
+    const url = URL.createObjectURL(m.file);
+    const isVid = m.file.type.startsWith('video/');
+    const card = document.createElement('div');
+    card.className = 'media-card';
+
+    // Preview
+    const prev = document.createElement('div');
+    prev.className = 'media-preview';
+    prev.innerHTML = (isVid
+      ? `<video src="${url}" muted playsinline></video>`
+      : `<img src="${url}" alt="${m.file.name}">`) +
+      `<span class="badge">${isVid ? 'vídeo' : 'foto'}</span>`;
+    const rmBtn = document.createElement('button');
+    rmBtn.className = 'rm'; rmBtn.textContent = '×'; rmBtn.title = 'Remover';
+    rmBtn.onclick = (e) => { e.stopPropagation(); removeMedia(i); };
+    prev.appendChild(rmBtn);
+
+    // Fields
+    const fields = document.createElement('div');
+    fields.className = 'media-fields';
+    fields.innerHTML = `<div class="mf-orig">${m.file.name}</div>`;
+
+    const nomeInput = document.createElement('input');
+    nomeInput.type = 'text';
+    nomeInput.placeholder = 'Título / nome desta mídia';
+    nomeInput.value = m.nome;
+    nomeInput.oninput = () => saveMediaField(i, 'nome', nomeInput.value);
+
+    const descInput = document.createElement('textarea');
+    descInput.placeholder = 'Descrição: o que mostra, equipamento fotografado, problema registrado...';
+    descInput.value = m.descricao;
+    descInput.oninput = () => saveMediaField(i, 'descricao', descInput.value);
+
+    fields.appendChild(nomeInput);
+    fields.appendChild(descInput);
+    card.appendChild(prev);
+    card.appendChild(fields);
+    grid.appendChild(card);
+  });
+
+  const imgs = mediaFiles.filter(m => m.file.type.startsWith('image/')).length;
+  const vids = mediaFiles.filter(m => m.file.type.startsWith('video/')).length;
+  if (mediaFiles.length) {
+    stat.innerHTML = `<span>${imgs} foto${imgs !== 1 ? 's' : ''}</span><span>${vids} vídeo${vids !== 1 ? 's' : ''}</span><span>${mediaFiles.length}/30 arquivos</span>`;
+  } else {
+    stat.innerHTML = '';
+  }
+}
+
+// Preview
+function buildPreview() {
+  const fields = [
+    ['Cliente', 'f_cliente'], ['Data', 'f_data'], ['Responsável', 'f_responsavel'],
+    ['Contato', 'f_contato'], ['Cargo', 'f_cargo'], ['Tipo de visita', 'f_tipo'],
+    ['Local', 'f_local'], ['Chegada', 'f_chegada'], ['Saída', 'f_saida'],
+    ['Objetivo', 'f_objetivo']
+  ];
+  const res = document.getElementById('f_resultado').value;
+  const desc = document.getElementById('f_descricao').value;
+  const prox = document.getElementById('f_proxima').value;
+  const proxdata = document.getElementById('f_proxdata').value;
+  const obs = document.getElementById('f_obs').value;
+  const leg = document.getElementById('f_legenda').value;
+
+  let rows = fields.map(([l, id]) => {
+    const v = document.getElementById(id).value;
+    return v ? `<tr><td>${l}</td><td>${v}</td></tr>` : '';
+  }).join('');
+  if (res) rows += `<tr><td>Resultado</td><td>${res}</td></tr>`;
+  if (prox) rows += `<tr><td>Próxima ação</td><td>${prox}${proxdata ? ' — ' + proxdata : ''}</td></tr>`;
+
+  let html = `<div class="preview-section"><h4>Informações gerais</h4><table class="preview-table">${rows}</table></div>`;
+  if (desc) html += `<div class="preview-section"><h4>Descrição</h4><p style="font-size:13px;color:var(--text);line-height:1.6">${desc}</p></div>`;
+  if (obs) html += `<div class="preview-section"><h4>Observações</h4><p style="font-size:13px;color:var(--text);line-height:1.6">${obs}</p></div>`;
+  if (mediaFiles.length) {
+    const imgs = mediaFiles.filter(m => m.file.type.startsWith('image/')).length;
+    const vids = mediaFiles.filter(m => m.file.type.startsWith('video/')).length;
+    let mediaHtml = `<div class="preview-section"><h4>Mídias (${imgs} foto(s) · ${vids} vídeo(s))</h4>`;
+    mediaHtml += '<table class="preview-table">';
+    mediaFiles.forEach((m, i) => {
+      const titulo = m.nome || m.file.name;
+      const desc = m.descricao ? `<br><em style="font-weight:400;color:var(--text-muted)">${m.descricao}</em>` : '';
+      const tipo = m.file.type.startsWith('video/') ? '🎬' : '📸';
+      mediaHtml += `<tr><td>${tipo} #${i+1}</td><td><strong>${titulo}</strong>${desc}</td></tr>`;
+    });
+    mediaHtml += '</table></div>';
+    html += mediaHtml;
+  }
+  document.getElementById('previewContent').innerHTML = html;
+
+  const filename = `relatorio-${(document.getElementById('f_cliente').value || 'visita').replace(/\s+/g,'-').toLowerCase()}-${document.getElementById('f_data').value || 'sem-data'}`;
+  document.getElementById('f_filename').value = filename;
+}
+
+// PDF generation
+function buildPDFData() {
+  return {
+    cliente: document.getElementById('f_cliente').value,
+    data: document.getElementById('f_data').value,
+    responsavel: document.getElementById('f_responsavel').value,
+    contato: document.getElementById('f_contato').value,
+    cargo: document.getElementById('f_cargo').value,
+    tipo: document.getElementById('f_tipo').value,
+    local: document.getElementById('f_local').value,
+    chegada: document.getElementById('f_chegada').value,
+    saida: document.getElementById('f_saida').value,
+    objetivo: document.getElementById('f_objetivo').value,
+    descricao: document.getElementById('f_descricao').value,
+    resultado: document.getElementById('f_resultado').value,
+    proxima: document.getElementById('f_proxima').value,
+    proxdata: document.getElementById('f_proxdata').value,
+    obs: document.getElementById('f_obs').value,
+    legenda: document.getElementById('f_legenda').value,
+    mediaCount: mediaFiles.length,
+    mediaItems: mediaFiles.map(m => ({ nome: m.nome || m.file.name, descricao: m.descricao, isVideo: m.file.type.startsWith('video/') })),
+    geradoEm: new Date().toLocaleString('pt-BR')
+  };
+}
+
+async function generatePDFBlob() {
+  const d = buildPDFData();
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const W = 210, margin = 18, cw = W - margin * 2;
+  let y = margin;
+
+  // Header
+  // Header: black bar with orange accent stripe
+  doc.setFillColor(17, 17, 17);
+  doc.rect(0, 0, W, 28, 'F');
+  doc.setFillColor(232, 97, 10);
+  doc.rect(0, 26, W, 3, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(16); doc.setFont('helvetica', 'bold');
+  doc.text('Relatório de Visita de Campo', margin, 12);
+  doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+  doc.text(`Gerado em: ${d.geradoEm}`, margin, 20);
+  if (d.cliente) doc.text(d.cliente, W - margin, 12, { align: 'right' });
+  y = 38;
+
+  const section = (title) => {
+    doc.setFillColor(245, 243, 240);
+    doc.rect(margin, y, cw, 7, 'F');
+    doc.setFillColor(232, 97, 10);
+    doc.rect(margin, y, 3, 7, 'F');
+    doc.setTextColor(17, 17, 17); doc.setFontSize(9); doc.setFont('helvetica', 'bold');
+    doc.text(title.toUpperCase(), margin + 6, y + 5);
+    y += 10;
+  };
+
+  const row = (label, value) => {
+    if (!value) return;
+    if (y > 270) { doc.addPage(); y = margin; }
+    doc.setTextColor(100, 100, 95); doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+    doc.text(label + ':', margin, y);
+    doc.setTextColor(26, 25, 22); doc.setFontSize(9); doc.setFont('helvetica', 'bold');
+    const lines = doc.splitTextToSize(value, cw - 45);
+    doc.text(lines, margin + 44, y);
+    y += lines.length * 5 + 2;
+  };
+
+  const textBlock = (label, value) => {
+    if (!value) return;
+    if (y > 260) { doc.addPage(); y = margin; }
+    doc.setTextColor(100, 100, 95); doc.setFontSize(8); doc.setFont('helvetica', 'bold');
+    doc.text(label + ':', margin, y); y += 5;
+    doc.setTextColor(26, 25, 22); doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+    const lines = doc.splitTextToSize(value, cw);
+    lines.forEach(line => {
+      if (y > 275) { doc.addPage(); y = margin; }
+      doc.text(line, margin, y); y += 5;
+    });
+    y += 3;
+  };
+
+  section('Identificação');
+  row('Cliente', d.cliente); row('Data', d.data);
+  row('Responsável', d.responsavel); row('Contato', d.contato);
+  row('Cargo', d.cargo); row('Tipo de visita', d.tipo); y += 4;
+
+  section('Localização e horários');
+  row('Local / Endereço', d.local);
+  row('Hora de chegada', d.chegada); row('Hora de saída', d.saida); y += 4;
+
+  section('Objetivo e descrição');
+  textBlock('Objetivo', d.objetivo);
+  textBlock('Descrição da visita', d.descricao); y += 2;
+
+  section('Resultados');
+  row('Resultado', d.resultado); row('Próxima ação', d.proxima);
+  row('Data da próxima ação', d.proxdata); y += 2;
+  if (d.obs) { section('Observações'); textBlock('', d.obs); y += 2; }
+
+  section('Mídias anexadas');
+  row('Total', `${d.mediaCount} arquivo(s)`);
+  if (d.legenda) textBlock('Legenda geral', d.legenda);
+  d.mediaItems.forEach((m, i) => {
+    if (y > 265) { doc.addPage(); y = margin; }
+    const icon = m.isVideo ? '\u25B6' : '\u25A0';
+    doc.setTextColor(232, 97, 10); doc.setFontSize(8); doc.setFont('helvetica', 'bold');
+    doc.text(`${icon} ${i + 1}. ${m.nome}`, margin, y); y += 5;
+    if (m.descricao) {
+      doc.setTextColor(80, 80, 75); doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+      const dlines = doc.splitTextToSize(m.descricao, cw);
+      dlines.forEach(l => { if (y > 278) { doc.addPage(); y = margin; } doc.text(l, margin + 3, y); y += 4; });
+    }
+    y += 2;
+  });
+
+  // Footer
+  const pages = doc.getNumberOfPages();
+  for (let i = 1; i <= pages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(7); doc.setTextColor(160, 158, 150); doc.setFont('helvetica', 'normal');
+    doc.text(`Página ${i} de ${pages}`, W - margin, 290, { align: 'right' });
+    doc.text('Relatório de Campo — gerado automaticamente', margin, 290);
+  }
+
+  // Photo gallery with captions
+  const imageFiles = mediaFiles.filter(m => m.file.type.startsWith('image/'));
+  if (imageFiles.length > 0) {
+    doc.addPage(); y = margin;
+    section('Galeria de fotos');
+    y += 4;
+    const thumbW = cw / 2 - 4;
+    const thumbH = 55;
+    let col = 0;
+    for (const m of imageFiles) {
+      try {
+        if (y + thumbH + 14 > 275) { doc.addPage(); y = margin; col = 0; }
+        const dataUrl = await fileToDataURL(m.file);
+        const x = margin + col * (thumbW + 8);
+        doc.addImage(dataUrl, 'JPEG', x, y, thumbW, thumbH);
+        // Caption
+        const cap = m.nome || m.file.name;
+        doc.setTextColor(17, 17, 17); doc.setFontSize(8); doc.setFont('helvetica', 'bold');
+        doc.text(cap, x, y + thumbH + 4, { maxWidth: thumbW });
+        if (m.descricao) {
+          doc.setTextColor(80, 80, 75); doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
+          doc.text(m.descricao, x, y + thumbH + 9, { maxWidth: thumbW });
+        }
+        col++;
+        if (col === 2) { col = 0; y += thumbH + 18; }
+      } catch(e) {}
+    }
+  }
+
+  return doc.output('blob');
+}
+
+function fileToDataURL(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
+
+async function downloadPDF() {
+  showStatus('mainStatus', 'info', 'Gerando PDF...', true);
+  try {
+    const blob = await generatePDFBlob();
+    const fname = document.getElementById('f_filename').value || 'relatorio';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = fname + '.pdf';
+    a.click();
+    showStatus('mainStatus', 'success', 'PDF baixado com sucesso!');
+  } catch(e) {
+    showStatus('mainStatus', 'error', 'Erro ao gerar PDF: ' + e.message);
+  }
+}
+
+function newReport() {
+  document.querySelectorAll('input[type=text], input[type=date], input[type=time], textarea, select').forEach(el => {
+    el.value = '';
+  });
+  document.querySelectorAll('.rating-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById('f_resultado').value = '';
+  mediaFiles = [];
+  renderMedia();
+  document.getElementById('mediaGrid').innerHTML = '';
+  document.getElementById('mediaStat').innerHTML = '';
+  document.querySelectorAll('.progress-step').forEach(s => { s.classList.remove('active','done'); });
+  currentStep = 0;
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('f_data').value = today;
+  goStep(1);
+}
+
+function showStatus(id, type, msg, spin) {
+  const el = document.getElementById(id);
+  el.className = 'status show ' + type;
+  el.innerHTML = (spin ? '<div class="spinner"></div>' : '') + msg;
+}
+</script>
+
+<script>
+// Register Service Worker for PWA / offline support
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => console.log('[SW] Registered:', reg.scope))
+      .catch(err => console.warn('[SW] Registration failed:', err));
+  });
+}
+</script>
+</body>
+</html>
